@@ -45,9 +45,13 @@ func (m *Consistent) Hash(key string) int {
 func (m *Consistent) Add(key string) int {
 	hash := m.Hash(key)
 
-	m.keys = append(m.keys, hash)
+	if _, ok := m.hashMap[hash]; !ok {
+		// Do not add another key to the sorted index if it already exists
+		m.keys = append(m.keys, hash)
+		sort.Ints(m.keys)
+	}
+
 	m.hashMap[hash] = key
-	sort.Ints(m.keys)
 
 	return hash
 }
