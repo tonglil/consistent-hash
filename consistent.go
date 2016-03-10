@@ -3,9 +3,9 @@ package consistent
 import (
 	"hash/crc32"
 	"sort"
+	"sync"
 )
 
-// Not threadsafe
 // Inspired by:
 // https://github.com/golang/groupcache/blob/master/consistenthash/consistenthash.go
 // https://github.com/stathat/consistent/blob/master/consistent.go
@@ -13,6 +13,7 @@ import (
 type Hash func(data []byte) uint32
 
 type Consistent struct {
+	sync.RWMutex
 	hash    Hash
 	keys    []int // Sorted
 	hashMap map[int]string
@@ -33,6 +34,8 @@ func New(fn Hash) *Consistent {
 
 // Returns true if there are no items available.
 func (m *Consistent) IsEmpty() bool {
+	m.RLock()
+	defer m.RUnlock()
 	return len(m.keys) == 0
 }
 
@@ -45,6 +48,8 @@ func (m *Consistent) Hash(key string) int {
 func (m *Consistent) Add(key string) int {
 	hash := m.Hash(key)
 
+	m.Lock()
+	defer m.Unlock()
 	if _, ok := m.hashMap[hash]; !ok {
 		// Do not add another key to the sorted index if it already exists
 		m.keys = append(m.keys, hash)
@@ -60,6 +65,8 @@ func (m *Consistent) Add(key string) int {
 func (m *Consistent) Remove(key string) {
 	hash := m.Hash(key)
 
+	m.Lock()
+	defer m.Unlock()
 	// Remove hash from m.keys
 	i := sort.SearchInts(m.keys, hash)
 	if i < len(m.keys) && m.keys[i] == hash {
@@ -81,6 +88,8 @@ func (m *Consistent) Get(key string) string {
 	hash := m.Hash(key)
 	index := m.prev(hash)
 
+	m.RLock()
+	defer m.RUnlock()
 	return m.hashMap[index]
 }
 
@@ -93,6 +102,8 @@ func (m *Consistent) Next(key string) string {
 	hash := m.Hash(key)
 	candidate := m.next(hash)
 
+	m.RLock()
+	defer m.RUnlock()
 	return m.hashMap[candidate]
 }
 
@@ -109,6 +120,9 @@ func (m *Consistent) Range(host string) (int, int) {
 }
 
 func (m *Consistent) prev(hash int) int {
+	m.RLock()
+	defer m.RUnlock()
+
 	rev := make([]int, len(m.keys))
 	copy(rev, m.keys)
 	sort.Sort(sort.Reverse(sort.IntSlice(rev)))
@@ -123,6 +137,9 @@ func (m *Consistent) prev(hash int) int {
 }
 
 func (m *Consistent) next(hash int) int {
+	m.RLock()
+	defer m.RUnlock()
+
 	i := sort.Search(len(m.keys), func(i int) bool { return m.keys[i] > hash })
 
 	if i == len(m.keys) {
