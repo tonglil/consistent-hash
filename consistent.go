@@ -93,6 +93,21 @@ func (m *Consistent) Get(key string) string {
 	return m.hashMap[index]
 }
 
+// Allow caller of this function to obtain item with hash
+// e.g. redundancy of data through storing in multiple items
+func (m *Consistent) GetFromHash(hash int) string {
+	if m.IsEmpty() {
+		return ""
+	}
+
+	index := m.prev(hash)
+
+	m.RLock()
+	defer m.RUnlock()
+	return m.hashMap[index]
+}
+
+
 // Get the next item in the hash to the provided key.
 func (m *Consistent) Next(key string) string {
 	if m.IsEmpty() {
