@@ -93,6 +93,30 @@ func (m *Consistent) Get(key string) string {
 	return m.hashMap[index]
 }
 
+// Factory Function
+// Returns numReplicas indexes that a key should reside on
+func (m *Consistent) GetReplicas(key string, numReplicas int) []string {
+
+	if m.IsEmpty() {
+		return nil
+	}
+
+	hash := m.Hash(key)
+	index := m.prev(hash)
+
+	locations := make([]string, numReplicas)
+
+	m.RLock()
+	defer m.RUnlock()
+	for replicaCurs := 0; replicaCurs < numReplicas; replicaCurs++ {
+		locations[replicaCurs] = m.hashMap[index]
+		index = m.next(index)
+	}
+
+	return locations
+
+}
+
 // Get the next item in the hash to the provided key.
 func (m *Consistent) Next(key string) string {
 	if m.IsEmpty() {
