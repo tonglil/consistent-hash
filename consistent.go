@@ -97,30 +97,17 @@ func (m *Consistent) Get(key string) string {
 	}
 
 	hash := m.Hash(key)
-	index := m.prev(hash)
+	index := m.next(hash)
 
 	m.RLock()
 	defer m.RUnlock()
 	return m.hashMap[index]
 }
 
-// Allow caller of this function to obtain item with hash
-// e.g. redundancy of data through storing in multiple items
-func (m *Consistent) GetFromHash(hash int) string {
-	if m.IsEmpty() {
-		return ""
-	}
-
-	index := m.prev(hash)
-
-	m.RLock()
-	defer m.RUnlock()
-	return m.hashMap[index]
-}
-
-// Factory Function
-// Returns numReplicas indexes that a key should reside on
-func (m *Consistent) GetReplicas(key string, numReplicas int) []string {
+// TODO:
+// This method should be refactored to use "next()" and return replicas only, excluding current node
+// Returns count indexes that a key resides on
+func (m *Consistent) GetReplicas(key string, count int) []string {
 
 	if m.IsEmpty() {
 		return nil
@@ -129,12 +116,33 @@ func (m *Consistent) GetReplicas(key string, numReplicas int) []string {
 	hash := m.Hash(key)
 	index := m.prev(hash)
 
-	locations := make([]string, numReplicas)
+	locations := make([]string, count)
 
 	m.RLock()
 	defer m.RUnlock()
-	for replicaCurs := 0; replicaCurs < numReplicas; replicaCurs++ {
-		locations[replicaCurs] = m.hashMap[index]
+	for i := 0; i < count; i++ {
+		locations[i] = m.hashMap[index]
+		index = m.next(index)
+	}
+
+	return locations
+}
+
+func (m *Consistent) GetLocations(key string, count int) []string {
+
+	if m.IsEmpty() {
+		return nil
+	}
+
+	hash := m.Hash(key)
+	index := m.next(hash)
+
+	locations := make([]string, count)
+
+	m.RLock()
+	defer m.RUnlock()
+	for i := 0; i < count; i++ {
+		locations[i] = m.hashMap[index]
 		index = m.next(index)
 	}
 
@@ -182,8 +190,8 @@ func (m *Consistent) Range(host string) (int, int) {
 		return 0, 0
 	}
 
-	from := m.Hash(host)
-	to := m.next(from) - 1
+	to := m.Hash(host)
+	from := m.prev(to-1) - 1
 
 	return from, to
 }
