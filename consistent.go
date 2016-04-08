@@ -145,7 +145,7 @@ func (m *Consistent) NextN(key string, count int) []string {
 	m.RLock()
 	defer m.RUnlock()
 
-	for i := 0; i <= count; i++ {
+	for i := 0; i < count; i++ {
 		hash = m.next(hash)
 		locations[i] = m.hashMap[hash]
 	}
