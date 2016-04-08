@@ -92,62 +92,31 @@ func (m *Consistent) Has(key string) bool {
 
 // Get the item in the hash the provided key is in the range of.
 func (m *Consistent) Get(key string) string {
-	if m.IsEmpty() {
-		return ""
-	}
-
-	hash := m.Hash(key)
-	index := m.next(hash)
-
-	m.RLock()
-	defer m.RUnlock()
-	return m.hashMap[index]
+	return m.Next(key)
 }
 
 // TODO:
 // This method should be refactored to use "next()" and return replicas only, excluding current node
-// Returns count indexes that a key resides on
-func (m *Consistent) GetReplicas(key string, count int) []string {
+// Return the current next n-1 nodes that the key belongs on
+//func (m *Consistent) GetReplicas(key string, count int) []string {
+//if m.IsEmpty() {
+//return nil
+//}
 
-	if m.IsEmpty() {
-		return nil
-	}
+//locations := make([]string, count)
+//hash := m.Hash(key)
 
-	hash := m.Hash(key)
-	index := m.prev(hash)
+//m.RLock()
+//defer m.RUnlock()
+//index := m.prev(hash)
 
-	locations := make([]string, count)
+//for i := 0; i < count; i++ {
+//locations[i] = m.hashMap[index]
+//index = m.next(index)
+//}
 
-	m.RLock()
-	defer m.RUnlock()
-	for i := 0; i < count; i++ {
-		locations[i] = m.hashMap[index]
-		index = m.next(index)
-	}
-
-	return locations
-}
-
-func (m *Consistent) GetLocations(key string, count int) []string {
-
-	if m.IsEmpty() {
-		return nil
-	}
-
-	hash := m.Hash(key)
-	index := m.next(hash)
-
-	locations := make([]string, count)
-
-	m.RLock()
-	defer m.RUnlock()
-	for i := 0; i < count; i++ {
-		locations[i] = m.hashMap[index]
-		index = m.next(index)
-	}
-
-	return locations
-}
+//return locations
+//}
 
 // Get the next item in the hash to the provided key.
 func (m *Consistent) Next(key string) string {
@@ -156,25 +125,46 @@ func (m *Consistent) Next(key string) string {
 	}
 
 	hash := m.Hash(key)
-	candidate := m.next(hash)
 
 	m.RLock()
 	defer m.RUnlock()
-	return m.hashMap[candidate]
+
+	index := m.next(hash)
+	return m.hashMap[index]
 }
 
+// Get the next N items in the hash to the provided key.
+func (m *Consistent) NextN(key string, count int) []string {
+	if m.IsEmpty() {
+		return nil
+	}
+
+	locations := make([]string, count)
+	hash := m.Hash(key)
+
+	m.RLock()
+	defer m.RUnlock()
+
+	for i := 0; i <= count; i++ {
+		hash = m.next(hash)
+		locations[i] = m.hashMap[hash]
+	}
+
+	return locations
+}
+
+// Get the previous N items in the hash to the provided key.
 func (m *Consistent) PrevN(key string, count int) []string {
 	if m.IsEmpty() {
 		return nil
 	}
 
 	locations := make([]string, count)
-
 	hash := m.Hash(key)
-	index := m.prev(hash)
 
 	m.RLock()
 	defer m.RUnlock()
+	index := m.prev(hash)
 
 	for i := 0; i < count; i++ {
 		locations[i] = m.hashMap[index]
@@ -191,15 +181,13 @@ func (m *Consistent) Range(host string) (int, int) {
 	}
 
 	to := m.Hash(host)
-	from := m.prev(to-1) - 1
+	from := m.prev(to-1) + 1
 
 	return from, to
 }
 
+// Internal operation, not thread safe, need to be R-locked
 func (m *Consistent) prev(hash int) int {
-	m.RLock()
-	defer m.RUnlock()
-
 	rev := make([]int, len(m.keys))
 	copy(rev, m.keys)
 	sort.Sort(sort.Reverse(sort.IntSlice(rev)))
@@ -208,16 +196,13 @@ func (m *Consistent) prev(hash int) int {
 
 	if i == len(rev) {
 		i = 0
-		//i -= 1
 	}
 
 	return rev[i]
 }
 
+// Internal operation, not thread safe, need to be R-locked
 func (m *Consistent) next(hash int) int {
-	m.RLock()
-	defer m.RUnlock()
-
 	i := sort.Search(len(m.keys), func(i int) bool { return m.keys[i] > hash })
 
 	if i == len(m.keys) {
